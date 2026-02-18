@@ -52,7 +52,7 @@ class MicrostreamServer extends EventEmitter {
 
     this._port = options.port || 5000
     this._audioConfig = Object.assign(
-      { sampleRate: 16000, bitDepth: 16, channels: 1 },
+      { sampleRate: 16000, bitDepth: 8, channels: 1 },
       options.audio
     )
     this._sessions = new Map()
@@ -147,7 +147,11 @@ class MicrostreamServer extends EventEmitter {
       this._server = null
     }
 
-    this._httpServer = null
+    if (this._httpServer) {
+      pending++
+      this._httpServer.close(done)
+      this._httpServer = null
+    }
 
     if (pending === 0 && callback) callback()
   }

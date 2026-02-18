@@ -19,6 +19,7 @@ class Session extends EventEmitter {
     this._audioBuffer = new AudioBuffer(audioConfig)
     this._heartbeatInterval = null
     this._lastHeartbeat = Date.now()
+    this._cleaned = false
 
     this._ws.on('message', (data, isBinary) => {
       if (!isBinary) return
@@ -136,6 +137,9 @@ class Session extends EventEmitter {
   }
 
   _cleanup () {
+    if (this._cleaned) return
+    this._cleaned = true
+
     if (this._heartbeatInterval) {
       clearInterval(this._heartbeatInterval)
       this._heartbeatInterval = null
