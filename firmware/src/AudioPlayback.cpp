@@ -1,7 +1,7 @@
 #include "AudioPlayback.h"
 
 AudioPlayback::AudioPlayback()
-  : _speakerPin(A3), _sampleRate(16000), _timingMicros(62), _playing(false) {}
+  : _speakerPin(A3), _sampleRate(8000), _timingMicros(125), _playing(false), _pwmInitialized(false), _lastSampleTime(0) {}
 
 void AudioPlayback::begin(pin_t speakerPin, unsigned int sampleRate, unsigned int bufferSize) {
   _speakerPin = speakerPin;
@@ -10,6 +10,10 @@ void AudioPlayback::begin(pin_t speakerPin, unsigned int sampleRate, unsigned in
 
   pinMode(_speakerPin, OUTPUT);
   _buffer.init(bufferSize);
+
+  // Set DAC to midpoint (silence)
+  analogWrite(_speakerPin, 2048);
+  _lastSampleTime = micros();
 }
 
 void AudioPlayback::feed(uint8_t sample) {
@@ -22,6 +26,27 @@ void AudioPlayback::feed(const uint8_t* data, unsigned int len) {
   }
 }
 
+void AudioPlayback::update() {
+  // Non-blocking: play one sample if timing allows
+  if (_buffer.getSize() == 0) {
+    if (_playing) {
+      analogWrite(_speakerPin, 2048);  // Return to silence
+      _playing = false;
+    }
+    return;
+  }
+
+  unsigned long now = micros();
+  if (now - _lastSampleTime >= _timingMicros) {
+    uint8_t value = _buffer.get();
+    // Map 8-bit (0-255) to 12-bit DAC (0-4095)
+    int dacValue = map(value, 0, 255, 0, 4095);
+    analogWrite(_speakerPin, dacValue);
+    _lastSampleTime = now;
+    _playing = true;
+  }
+}
+
 bool AudioPlayback::play() {
   if (_buffer.getSize() == 0) {
     _playing = false;
@@ -29,31 +54,34 @@ bool AudioPlayback::play() {
   }
 
   _playing = true;
-  unsigned long lastWrite = micros();
 
+  // Blocking playback with tight timing
   while (_buffer.getSize() > 0) {
     uint8_t value = _buffer.get();
 
-    // Map 8-bit unsigned PCM to 12-bit DAC range
-    int dacValue = map(value, 0, 255, 0, 4095);
-
-    // Maintain precise sample timing
-    unsigned long now = micros();
-    unsigned long diff = now - lastWrite;
-    if (diff < _timingMicros) {
-      delayMicroseconds(_timingMicros - diff);
+    // Busy-wait for precise timing
+    while (micros() - _lastSampleTime < _timingMicros) {
+      // spin
     }
+    _lastSampleTime = micros();
 
+    // Map 8-bit (0-255) to 12-bit DAC (0-4095)
+    int dacValue = map(value, 0, 255, 0, 4095);
     analogWrite(_speakerPin, dacValue);
-    lastWrite = micros();
   }
 
+  // Return to silence
+  analogWrite(_speakerPin, 2048);
   _playing = false;
   return true;
 }
 
 bool AudioPlayback::isPlaying() const {
   return _playing;
+}
+
+bool AudioPlayback::hasBufferedData() const {
+  return _buffer.getSize() > 0;
 }
 
 RingBuffer& AudioPlayback::buffer() {

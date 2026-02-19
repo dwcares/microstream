@@ -1,4 +1,5 @@
 const OpenAI = require('openai')
+const { toFile } = require('openai')
 
 class SpeechPipeline {
   constructor (options = {}) {
@@ -42,7 +43,9 @@ class SpeechPipeline {
   }
 
   async _transcribe (wavBuffer) {
-    const file = new File([wavBuffer], 'recording.wav', { type: 'audio/wav' })
+    // Use OpenAI's toFile helper to create a proper file object from buffer
+    const file = await toFile(wavBuffer, 'recording.wav', { type: 'audio/wav' })
+
     const result = await this._openai.audio.transcriptions.create({
       model: 'whisper-1',
       file: file,
@@ -89,18 +92,39 @@ class SpeechPipeline {
    * Convert OpenAI TTS output to device format.
    *
    * TTS returns:  24kHz, 16-bit signed LE, mono
-   * Device needs:  16kHz, 8-bit unsigned, mono
+   * Device needs:  8kHz, 8-bit unsigned, mono
    */
   static convertTtsToDevice (ttsBuffer) {
     const inputSamples = ttsBuffer.length / 2 // 2 bytes per 16-bit sample
-    const outputSamples = Math.floor(inputSamples * 16000 / 24000)
+    const outputSamples = Math.floor(inputSamples * 8000 / 24000)
     const output = Buffer.alloc(outputSamples)
-    const ratio = 24000 / 16000 // 1.5
+    const ratio = 24000 / 8000 // 3.0
+
+    // Fade in/out duration in output samples (10ms at 8kHz = 80 samples)
+    const fadeSamples = 80
 
     for (let i = 0; i < outputSamples; i++) {
-      // Nearest-neighbor resample: pick source sample at position i * 1.5
-      const srcIndex = Math.min(Math.floor(i * ratio), inputSamples - 1)
-      const sample16 = ttsBuffer.readInt16LE(srcIndex * 2)
+      // Linear interpolation for smoother resampling
+      const srcPos = i * ratio
+      const srcIndex = Math.floor(srcPos)
+      const frac = srcPos - srcIndex
+
+      // Get two adjacent samples for interpolation
+      const sample1 = srcIndex < inputSamples ? ttsBuffer.readInt16LE(srcIndex * 2) : 0
+      const sample2 = srcIndex + 1 < inputSamples ? ttsBuffer.readInt16LE((srcIndex + 1) * 2) : sample1
+
+      // Interpolate between samples
+      let sample16 = Math.round(sample1 + frac * (sample2 - sample1))
+
+      // Apply fade in/out to prevent clicks at audio boundaries
+      if (i < fadeSamples) {
+        // Fade in
+        sample16 = Math.round(sample16 * (i / fadeSamples))
+      } else if (i >= outputSamples - fadeSamples) {
+        // Fade out
+        const remaining = outputSamples - i
+        sample16 = Math.round(sample16 * (remaining / fadeSamples))
+      }
 
       // 16-bit signed (-32768..32767) → 8-bit unsigned (0..255)
       const sample8 = Math.max(0, Math.min(255, (sample16 >> 8) + 128))

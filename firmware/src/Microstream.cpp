@@ -58,8 +58,9 @@ void Microstream::update() {
     return;
   }
 
-  // Recording: send audio periodically
+  // Recording: capture samples and send audio periodically
   if (_recording) {
+    _capture.capture();  // Poll for new audio samples
     unsigned long now = millis();
     if (now - _lastSendTime >= SEND_INTERVAL_MS) {
       _sendAudio();
@@ -113,6 +114,8 @@ bool Microstream::isRecording() const {
 }
 
 bool Microstream::isPlaying() const {
+  // Only check the active playing flag, not buffered data
+  // This ensures we properly transition out of playing state
   return _playback.isPlaying();
 }
 
@@ -155,15 +158,6 @@ void Microstream::_sendAudio() {
   while (buf.getSize() >= MIN_SEND_SIZE) {
     unsigned int size = min((unsigned int)buf.getSize(), MAX_SEND_SIZE);
 
-    // Encode: type byte + audio samples
-    unsigned int msgLen = MicrostreamProtocol::encodeAudioData(
-      _txBuffer,
-      NULL, // We'll fill samples directly below
-      0
-    );
-
-    // Actually, build the message manually for efficiency:
-    // type byte already set by encode, now fill the samples
     _txBuffer[0] = MicrostreamProtocol::AUDIO_DATA;
     for (unsigned int i = 0; i < size; i++) {
       _txBuffer[1 + i] = buf.get();
@@ -184,26 +178,44 @@ void Microstream::_sendHeartbeat() {
 }
 
 void Microstream::_receiveAndPlay() {
-  // Read available data from TCP and handle messages
+  // Read available data from TCP and handle messages.
+  // Raw TCP has no framing, so we use a heuristic to find message boundaries:
+  // known message type bytes (0x01-0x05) are near-minimum values in 8-bit
+  // unsigned PCM (centered at 128) and extremely rare in real audio.
   while (_tcpClient.available()) {
-    // For now, using a simple approach: read the type byte, then payload
-    // In a full WebSocket implementation, the WS library would handle framing.
-    // With raw TCP as a fallback, we read the type byte and stream audio directly.
     uint8_t typeByte = _tcpClient.read();
 
-    if (typeByte == MicrostreamProtocol::AUDIO_DATA) {
-      // Stream remaining available bytes as audio
-      while (_tcpClient.available()) {
-        uint8_t sample = _tcpClient.read();
-        // Check if this is actually a new message type byte
-        // (Simple heuristic: if we see a known type after audio, stop)
-        _playback.feed(sample);
+    switch (typeByte) {
+      case MicrostreamProtocol::AUDIO_DATA: {
+        while (_tcpClient.available()) {
+          int next = _tcpClient.peek();
+          if (next >= MicrostreamProtocol::AUDIO_DATA &&
+              next <= MicrostreamProtocol::MSG_ERROR) {
+            break;
+          }
+          _playback.feed((uint8_t)_tcpClient.read());
+        }
+        break;
       }
-    } else if (typeByte == MicrostreamProtocol::HEARTBEAT) {
-      // Heartbeat received, nothing to do
+      case MicrostreamProtocol::HEARTBEAT:
+        break;
+      case MicrostreamProtocol::CONFIG:
+        // Config payload is JSON (bytes >= 0x20), skip it
+        while (_tcpClient.available()) {
+          int next = _tcpClient.peek();
+          if (next >= MicrostreamProtocol::AUDIO_DATA &&
+              next <= MicrostreamProtocol::MSG_ERROR) {
+            break;
+          }
+          _tcpClient.read();
+        }
+        break;
+      default:
+        break;
     }
   }
 
+  // Blocking playback - plays all buffered samples at correct rate
   _playback.play();
 }
 
