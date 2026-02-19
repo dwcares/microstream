@@ -5,10 +5,10 @@
 #include "RingBuffer.h"
 
 /**
- * Timed audio playback to a DAC/PWM speaker pin.
+ * Non-blocking audio playback to a PWM speaker pin.
  *
- * Drains a ring buffer at a precise sample rate using microsecond timing.
- * Call play() from the main loop — it blocks until the buffer is empty.
+ * Call update() frequently from the main loop - it plays one sample
+ * per call if enough time has elapsed since the last sample.
  */
 class AudioPlayback {
 public:
@@ -20,11 +20,15 @@ public:
   void feed(uint8_t sample);
   void feed(const uint8_t* data, unsigned int len);
 
-  // Play all buffered audio. Blocks until buffer is drained.
-  // Returns true if any audio was played.
+  // Call frequently from loop() - plays samples at the correct rate
+  // Non-blocking: returns immediately after playing 0 or 1 sample
+  void update();
+
+  // Old blocking play() - kept for compatibility but use update() instead
   bool play();
 
   bool isPlaying() const;
+  bool hasBufferedData() const;
 
   RingBuffer& buffer();
 
@@ -33,6 +37,8 @@ private:
   unsigned int _sampleRate;
   unsigned int _timingMicros;
   bool _playing;
+  bool _pwmInitialized;
+  unsigned long _lastSampleTime;
   RingBuffer _buffer;
 };
 

@@ -51,14 +51,28 @@ class Session extends EventEmitter {
     if (!this.connected) return
 
     const buf = Buffer.from(pcmBuffer)
-    const chunkSize = 512
 
-    // Send audio in chunks to avoid overwhelming the device
-    for (let offset = 0; offset < buf.length; offset += chunkSize) {
+    // Photon has 20KB buffer at 8kHz = 2.5 seconds
+    // Send 2KB chunks (~250ms) frequently to keep buffer fed during blocking playback
+    const chunkSize = 2048
+    const chunkDurationMs = (chunkSize / 8000) * 1000  // ~256ms per chunk
+    const sendIntervalMs = chunkDurationMs * 0.4  // Send at 40% to stay well ahead
+
+    let offset = 0
+    const sendNextChunk = () => {
+      if (!this.connected || offset >= buf.length) return
+
       const end = Math.min(offset + chunkSize, buf.length)
       const chunk = buf.slice(offset, end)
       this._send(encodeAudioData(chunk))
+      offset = end
+
+      if (offset < buf.length) {
+        setTimeout(sendNextChunk, sendIntervalMs)
+      }
     }
+
+    sendNextChunk()
   }
 
   close () {

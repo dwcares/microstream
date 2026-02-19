@@ -58,8 +58,9 @@ void Microstream::update() {
     return;
   }
 
-  // Recording: send audio periodically
+  // Recording: capture samples and send audio periodically
   if (_recording) {
+    _capture.capture();  // Poll for new audio samples
     unsigned long now = millis();
     if (now - _lastSendTime >= SEND_INTERVAL_MS) {
       _sendAudio();
@@ -113,6 +114,8 @@ bool Microstream::isRecording() const {
 }
 
 bool Microstream::isPlaying() const {
+  // Only check the active playing flag, not buffered data
+  // This ensures we properly transition out of playing state
   return _playback.isPlaying();
 }
 
@@ -212,6 +215,7 @@ void Microstream::_receiveAndPlay() {
     }
   }
 
+  // Blocking playback - plays all buffered samples at correct rate
   _playback.play();
 }
 
