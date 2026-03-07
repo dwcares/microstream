@@ -49,8 +49,8 @@ void setup() {
   cfg.bitDepth = 16;       // 16-bit signed PCM (standard WAV format)
   cfg.micPin = MIC_PIN;
   cfg.speakerPin = SPEAKER_PIN;
-  cfg.captureBufferSize = 32768;  // 32KB capture buffer (~1 sec at 16kHz 16-bit)
-  cfg.playbackBufferSize = 32768; // 32KB playback (~1 sec at 16kHz 16-bit)
+  cfg.captureBufferSize = 8192;   // 8K samples (~0.5 sec at 16kHz)
+  cfg.playbackBufferSize = 8192;  // 8K samples (~0.5 sec at 16kHz)
 
   Serial.printlnf("Connecting to %s:%d%s", SERVER_HOST, SERVER_PORT, SERVER_PATH);
 

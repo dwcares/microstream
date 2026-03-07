@@ -51,7 +51,17 @@ class TcpSocketAdapter extends EventEmitter {
 
   send (data, options) {
     if (this._readyState === 1) {
-      this._socket.write(Buffer.from(data))
+      // Convert from WebSocket format [type][payload] to TCP format [type][length LE][payload]
+      const buf = Buffer.from(data)
+      const type = buf[0]
+      const payload = buf.slice(1)
+      const tcpMsg = Buffer.allocUnsafe(3 + payload.length)
+      tcpMsg[0] = type
+      tcpMsg.writeUInt16LE(payload.length, 1)
+      if (payload.length > 0) {
+        payload.copy(tcpMsg, 3)
+      }
+      this._socket.write(tcpMsg)
     }
   }
 

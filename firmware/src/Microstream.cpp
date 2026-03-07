@@ -9,6 +9,7 @@ Microstream::Microstream()
     _lastHeartbeatTime(0),
     _lastConnectAttempt(0),
     _reconnectDelay(2000),
+    _rxBufferLen(0),
     _onConnected(NULL),
     _onDisconnected(NULL),
     _onPlaybackStart(NULL),
@@ -162,10 +163,9 @@ void Microstream::_connect() {
 void Microstream::_sendAudio() {
   RingBuffer& buf = _capture.buffer();
 
-  // For 16-bit audio, each sample is 2 bytes
-  // MIN_SEND_SIZE and MAX_SEND_SIZE are in samples
+  // MIN_SEND_SIZE and MAX_SEND_SIZE are in samples (int16_t)
   while (buf.getSize() >= MIN_SEND_SIZE) {
-    unsigned int samples = min((unsigned int)buf.getSize(), MAX_SEND_SIZE / 2);
+    unsigned int samples = min((unsigned int)buf.getSize(), MAX_SEND_SIZE);
     unsigned int bytes = samples * 2;
 
     // TCP protocol: [type (1 byte)][length (2 bytes LE)][payload]
@@ -201,45 +201,54 @@ void Microstream::_sendHeartbeat() {
 }
 
 void Microstream::_receiveAndPlay() {
-  // Read available data from TCP and handle messages.
-  // 16-bit audio: read 2 bytes per sample, little-endian
-  while (_tcpClient.available()) {
-    uint8_t typeByte = _tcpClient.read();
+  // Read available TCP data into our buffer
+  while (_tcpClient.available() && _rxBufferLen < sizeof(_rxBuffer)) {
+    _rxBuffer[_rxBufferLen++] = _tcpClient.read();
+  }
 
+  // Process complete messages from buffer
+  // TCP protocol: [type (1 byte)][length (2 bytes LE)][payload]
+  unsigned int pos = 0;
+
+  while (pos + 3 <= _rxBufferLen) {
+    uint8_t typeByte = _rxBuffer[pos];
+    uint16_t length = _rxBuffer[pos + 1] | (_rxBuffer[pos + 2] << 8);
+
+    // Check if we have the complete message
+    if (pos + 3 + length > _rxBufferLen) {
+      break; // Wait for more data
+    }
+
+    // Process the message
     switch (typeByte) {
       case MicrostreamProtocol::AUDIO_DATA: {
-        // Read 16-bit samples (2 bytes each, little-endian)
-        while (_tcpClient.available() >= 2) {
-          uint8_t low = _tcpClient.read();
-          int next = _tcpClient.peek();
-          // Check if next byte is a message type (end of audio data)
-          if (next >= MicrostreamProtocol::AUDIO_DATA &&
-              next <= MicrostreamProtocol::MSG_ERROR) {
-            // Odd byte at end - can't form a sample, discard
-            break;
-          }
-          uint8_t high = _tcpClient.read();
+        // Read 16-bit samples from payload
+        unsigned int samples = length / 2;
+        for (unsigned int i = 0; i < samples; i++) {
+          uint8_t low = _rxBuffer[pos + 3 + i * 2];
+          uint8_t high = _rxBuffer[pos + 3 + i * 2 + 1];
           int16_t sample = (int16_t)((high << 8) | low);
           _playback.feed(sample);
         }
         break;
       }
       case MicrostreamProtocol::HEARTBEAT:
+        // No payload
         break;
       case MicrostreamProtocol::CONFIG:
-        // Config payload is JSON (bytes >= 0x20), skip it
-        while (_tcpClient.available()) {
-          int next = _tcpClient.peek();
-          if (next >= MicrostreamProtocol::AUDIO_DATA &&
-              next <= MicrostreamProtocol::MSG_ERROR) {
-            break;
-          }
-          _tcpClient.read();
-        }
+        // Skip config payload (already handled by length)
         break;
       default:
         break;
     }
+
+    pos += 3 + length;
+  }
+
+  // Remove processed data from buffer
+  if (pos > 0) {
+    memmove(_rxBuffer, _rxBuffer + pos, _rxBufferLen - pos);
+    _rxBufferLen -= pos;
   }
 
   // Blocking playback - plays all buffered samples at correct rate

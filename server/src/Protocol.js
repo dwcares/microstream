@@ -1,10 +1,12 @@
 /**
  * Binary message protocol for microstream.
  *
- * Each WebSocket binary message:
- *   [ type (1 byte) | payload (0-N bytes) ]
+ * TCP protocol format (length-prefixed):
+ *   [ type (1 byte) | length (2 bytes LE) | payload (0-N bytes) ]
  *
- * WebSocket handles framing, so no length field is needed.
+ * WebSocket handles framing, so messages are still sent as:
+ *   [ type (1 byte) | payload (0-N bytes) ]
+ * The TcpSocketAdapter adds length prefix when sending over raw TCP.
  */
 
 const MessageType = {
@@ -15,12 +17,25 @@ const MessageType = {
   ERROR: 0x05
 }
 
+// Encode for WebSocket (no length prefix - WS handles framing)
 function encode (type, payload) {
   const payloadBuf = payload ? Buffer.from(payload) : Buffer.alloc(0)
   const msg = Buffer.allocUnsafe(1 + payloadBuf.length)
   msg.writeUInt8(type, 0)
   if (payloadBuf.length > 0) {
     payloadBuf.copy(msg, 1)
+  }
+  return msg
+}
+
+// Encode for TCP (with length prefix)
+function encodeTcp (type, payload) {
+  const payloadBuf = payload ? Buffer.from(payload) : Buffer.alloc(0)
+  const msg = Buffer.allocUnsafe(3 + payloadBuf.length)
+  msg.writeUInt8(type, 0)
+  msg.writeUInt16LE(payloadBuf.length, 1)
+  if (payloadBuf.length > 0) {
+    payloadBuf.copy(msg, 3)
   }
   return msg
 }

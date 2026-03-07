@@ -72,6 +72,8 @@ private:
   AudioPlayback _playback;
 
   uint8_t _txBuffer[1028]; // 1 byte type + 2 bytes length + 1024 bytes payload + 1 spare
+  uint8_t _rxBuffer[4096]; // Receive buffer for partial TCP messages
+  unsigned int _rxBufferLen;
 
   unsigned long _lastSendTime;
   unsigned long _lastHeartbeatTime;
@@ -80,8 +82,8 @@ private:
 
   static const unsigned int SEND_INTERVAL_MS = 50;     // Send more frequently at 16kHz
   static const unsigned int HEARTBEAT_INTERVAL_MS = 5000;
-  static const unsigned int MIN_SEND_SIZE = 256;       // Send smaller chunks more often
-  static const unsigned int MAX_SEND_SIZE = 1024;
+  static const unsigned int MIN_SEND_SIZE = 128;       // Min samples before sending (128 samples = 256 bytes)
+  static const unsigned int MAX_SEND_SIZE = 512;       // Max samples per packet (512 samples = 1024 bytes)
   static const unsigned int MAX_RECONNECT_DELAY_MS = 30000;
 
   MicrostreamCallback _onConnected;
