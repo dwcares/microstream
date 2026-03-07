@@ -34,7 +34,9 @@ public:
 private:
   pin_t _micPin;
   unsigned int _sampleRate;
-  unsigned int _timingMicros; // microseconds between samples
+  unsigned int _timingMicros;     // Integer part of sample interval
+  unsigned int _timingFrac;       // Fractional part (0-999) for sub-microsecond accuracy
+  unsigned int _fracAccum;        // Accumulated fractional error
   bool _capturing;
   unsigned long _lastSampleTime;
 
@@ -44,13 +46,13 @@ private:
   int16_t _adcMid;
 
   // Simple IIR low-pass filter state for anti-aliasing
-  // Cutoff ~3kHz at 8kHz sample rate (alpha ~0.7)
+  // At 16kHz sample rate, alpha=0.7 gives cutoff ~5-6kHz (Nyquist is 8kHz)
   int32_t _filterState;
   static const int32_t FILTER_ALPHA = 180;  // 0.7 * 256 ≈ 180
 
   // DC-blocking high-pass filter to remove drift
   // y[n] = alpha * (y[n-1] + x[n] - x[n-1])
-  // Alpha ~0.995 gives cutoff ~25Hz at 8kHz (removes DC, keeps voice)
+  // Alpha ~0.995 gives cutoff ~12Hz at 16kHz (removes DC, keeps voice)
   int32_t _hpfPrevInput;
   int32_t _hpfPrevOutput;
   static const int32_t HPF_ALPHA = 254;  // 0.995 * 256 ≈ 254

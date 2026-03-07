@@ -1,12 +1,18 @@
 #include "AudioCapture.h"
 
 AudioCapture::AudioCapture()
-  : _micPin(A0), _sampleRate(16000), _timingMicros(62), _capturing(false), _lastSampleTime(0), _adcMid(2048), _filterState(2048 << 8), _hpfPrevInput(0), _hpfPrevOutput(0) {}
+  : _micPin(A0), _sampleRate(16000), _timingMicros(62), _timingFrac(500), _fracAccum(0), _capturing(false), _lastSampleTime(0), _adcMid(2048), _filterState(2048 << 8), _hpfPrevInput(0), _hpfPrevOutput(0) {}
 
 void AudioCapture::begin(pin_t micPin, unsigned int sampleRate, unsigned int bufferSize) {
   _micPin = micPin;
   _sampleRate = sampleRate;
-  _timingMicros = 1000000 / sampleRate; // e.g., 1000000/16000 = 62 us
+
+  // Calculate timing with sub-microsecond precision
+  // 1000000 / 16000 = 62.5 μs → _timingMicros=62, _timingFrac=500 (out of 1000)
+  unsigned long totalNanos = 1000000000UL / sampleRate;  // nanoseconds per sample
+  _timingMicros = totalNanos / 1000;                      // integer microseconds
+  _timingFrac = totalNanos % 1000;                        // fractional nanoseconds (0-999)
+  _fracAccum = 0;
 
   pinMode(_micPin, INPUT);
 
@@ -30,6 +36,7 @@ void AudioCapture::startCapture() {
   _filterState = _adcMid << 8;  // Reset filter to calibrated center
   _hpfPrevInput = 0;
   _hpfPrevOutput = 0;
+  _fracAccum = 0;
   _capturing = true;
   _lastSampleTime = micros();
 }
@@ -49,29 +56,24 @@ void AudioCapture::capture() {
     uint16_t raw = analogRead(_micPin);
 
     // IIR low-pass filter to prevent aliasing (fixed-point math)
-    // y[n] = alpha * x[n] + (1 - alpha) * y[n-1]
-    // Using 8-bit fixed point: alpha = 180/256 ≈ 0.7, cutoff ~3kHz at 8kHz
     int32_t input = raw << 8;  // Scale up for fixed-point
     _filterState = ((FILTER_ALPHA * input) + ((256 - FILTER_ALPHA) * _filterState)) >> 8;
     uint16_t filtered = _filterState >> 8;  // Scale back down
 
     // Convert to 16-bit signed using calibrated center point
-    int32_t centered = ((int32_t)filtered - _adcMid) << 4;
-
-    // DC-blocking high-pass filter to remove any remaining drift
-    // y[n] = alpha * (y[n-1] + x[n] - x[n-1])
-    int32_t hpfOutput = (HPF_ALPHA * (_hpfPrevOutput + centered - _hpfPrevInput)) >> 8;
-    _hpfPrevInput = centered;
-    _hpfPrevOutput = hpfOutput;
-
-    // Clamp to 16-bit signed range
-    int16_t sample16 = (int16_t)constrain(hpfOutput, -32768, 32767);
+    int16_t sample16 = ((int32_t)filtered - _adcMid) << 4;
 
     // Store as two bytes, little-endian
     _buffer.put((uint8_t)(sample16 & 0xFF));         // Low byte
     _buffer.put((uint8_t)((sample16 >> 8) & 0xFF));  // High byte
 
+    // Advance timing with sub-microsecond accuracy
     _lastSampleTime += _timingMicros;
+    _fracAccum += _timingFrac;
+    if (_fracAccum >= 1000) {
+      _fracAccum -= 1000;
+      _lastSampleTime += 1;
+    }
   }
 }
 

@@ -72,9 +72,9 @@ private:
   unsigned long _lastConnectAttempt;
   unsigned int _reconnectDelay;
 
-  static const unsigned int SEND_INTERVAL_MS = 100;
+  static const unsigned int SEND_INTERVAL_MS = 50;     // Send more frequently at 16kHz
   static const unsigned int HEARTBEAT_INTERVAL_MS = 5000;
-  static const unsigned int MIN_SEND_SIZE = 512;
+  static const unsigned int MIN_SEND_SIZE = 256;       // Send smaller chunks more often
   static const unsigned int MAX_SEND_SIZE = 1024;
   static const unsigned int MAX_RECONNECT_DELAY_MS = 30000;
 

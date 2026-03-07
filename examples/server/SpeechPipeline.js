@@ -92,16 +92,16 @@ class SpeechPipeline {
    * Convert OpenAI TTS output to device format.
    *
    * TTS returns:  24kHz, 16-bit signed LE, mono
-   * Device needs:  8kHz, 16-bit signed LE, mono
+   * Device needs:  16kHz, 16-bit signed LE, mono
    */
   static convertTtsToDevice (ttsBuffer) {
     const inputSamples = ttsBuffer.length / 2 // 2 bytes per 16-bit sample
-    const outputSamples = Math.floor(inputSamples * 8000 / 24000)
+    const outputSamples = Math.floor(inputSamples * 16000 / 24000)
     const output = Buffer.alloc(outputSamples * 2) // 2 bytes per 16-bit sample
-    const ratio = 24000 / 8000 // 3.0
+    const ratio = 24000 / 16000 // 1.5
 
-    // Fade in/out duration in output samples (10ms at 8kHz = 80 samples)
-    const fadeSamples = 80
+    // Fade in/out duration in output samples (10ms at 16kHz = 160 samples)
+    const fadeSamples = 160
 
     for (let i = 0; i < outputSamples; i++) {
       // Linear interpolation for smoother resampling
