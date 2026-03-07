@@ -65,7 +65,7 @@ private:
   AudioCapture _capture;
   AudioPlayback _playback;
 
-  uint8_t _txBuffer[1026]; // 1 byte type + 1024 bytes payload + 1 spare
+  uint8_t _txBuffer[1028]; // 1 byte type + 2 bytes length + 1024 bytes payload + 1 spare
 
   unsigned long _lastSendTime;
   unsigned long _lastHeartbeatTime;

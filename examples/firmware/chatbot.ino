@@ -1,13 +1,13 @@
 #include "Microstream.h"
 
 // --- Hardware Pins (Photon) ---
-#define LED_PIN      D7       // Onboard LED (no external wiring needed)
+#define LED_PIN      D0       // Onboard LED (no external wiring needed)
 #define BUTTON_PIN   D3
 #define MIC_PIN      A6
 #define SPEAKER_PIN  A3       // True DAC output
 
 // --- Server ---
-#define SERVER_HOST "192.168.7.77"
+#define SERVER_HOST "192.168.7.130"
 #define SERVER_PORT 5000
 #define SERVER_PATH "/"
 
@@ -46,11 +46,11 @@ void setup() {
 
   MicrostreamConfig cfg;
   cfg.sampleRate = 8000;   // 8kHz - easier on limited RAM
-  cfg.bitDepth = 8;
+  cfg.bitDepth = 16;       // 16-bit signed PCM (standard WAV format)
   cfg.micPin = MIC_PIN;
   cfg.speakerPin = SPEAKER_PIN;
-  cfg.captureBufferSize = 4096;   // 4KB capture buffer
-  cfg.playbackBufferSize = 20000; // 20KB playback - ~2.5 seconds at 8kHz
+  cfg.captureBufferSize = 8192;   // 8KB capture buffer (4KB samples at 16-bit)
+  cfg.playbackBufferSize = 20000; // 20KB playback - ~1.25 seconds at 8kHz 16-bit
 
   Serial.printlnf("Connecting to %s:%d%s", SERVER_HOST, SERVER_PORT, SERVER_PATH);
 

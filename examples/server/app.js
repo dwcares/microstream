@@ -1,13 +1,21 @@
 require('dotenv').config()
 
+const fs = require('fs')
+const path = require('path')
 const { MicrostreamServer } = require('microstream-server')
 const SpeechPipeline = require('./SpeechPipeline')
+
+// Directory to save audio files
+const AUDIO_DIR = path.join(__dirname, 'audio')
+if (!fs.existsSync(AUDIO_DIR)) {
+  fs.mkdirSync(AUDIO_DIR, { recursive: true })
+}
 
 const PORT = process.env.PORT || 5000
 
 const server = new MicrostreamServer({
   port: PORT,
-  audio: { sampleRate: 8000, bitDepth: 8, channels: 1 }
+  audio: { sampleRate: 8000, bitDepth: 16, channels: 1 }
 })
 
 const pipeline = new SpeechPipeline({
@@ -29,6 +37,13 @@ server.on('session', (session) => {
 
   session.on('audioEnd', async (wavBuffer) => {
     console.log(`[${tag}] Recording ended (${wavBuffer.length} bytes)`)
+
+    // Save incoming audio to file for playback on PC
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const filename = `recording-${tag}-${timestamp}.wav`
+    const filepath = path.join(AUDIO_DIR, filename)
+    fs.writeFileSync(filepath, wavBuffer)
+    console.log(`[${tag}] Saved audio to: ${filepath}`)
 
     try {
       const result = await pipeline.processAudio(session.id, wavBuffer)

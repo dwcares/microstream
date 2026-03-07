@@ -11,16 +11,14 @@ const { MessageType } = require('./Protocol')
  *
  * Parses the raw TCP stream into discrete protocol messages.
  *
- * Protocol format: Each message is [type (1 byte) | payload (0-N bytes)]
- * - AUDIO_DATA (0x01): followed by audio samples until next message type
- * - AUDIO_END (0x02): no payload, signals end of recording
- * - HEARTBEAT (0x03): no payload
- * - CONFIG (0x04): followed by JSON payload
- * - ERROR (0x05): followed by UTF-8 payload
+ * Protocol format (TCP with length prefix):
+ *   [type (1 byte)][length (2 bytes LE)][payload (length bytes)]
  *
- * The firmware sends each message as a separate TCP write, but TCP may
- * coalesce them. We detect message boundaries by looking for message type
- * bytes at the START of each TCP chunk (where write boundaries likely are).
+ * - AUDIO_DATA (0x01): followed by length + audio samples
+ * - AUDIO_END (0x02): length = 0
+ * - HEARTBEAT (0x03): length = 0
+ * - CONFIG (0x04): followed by length + JSON payload
+ * - ERROR (0x05): followed by length + UTF-8 payload
  */
 class TcpSocketAdapter extends EventEmitter {
   constructor (socket) {
@@ -28,15 +26,15 @@ class TcpSocketAdapter extends EventEmitter {
     this.OPEN = 1
     this._socket = socket
     this._readyState = 1
-    this._audioBuffer = [] // Accumulate audio samples
-    this._inAudioMessage = false
+    this._buffer = Buffer.alloc(0) // Accumulate incoming data
+    this._audioChunks = [] // Accumulate audio for session
 
     socket.on('data', (data) => {
-      this._parseStream(data)
+      this._buffer = Buffer.concat([this._buffer, data])
+      this._parseMessages()
     })
 
     socket.on('close', () => {
-      this._flushAudio()
       this._readyState = 3
       this.emit('close')
     })
@@ -62,81 +60,30 @@ class TcpSocketAdapter extends EventEmitter {
     this._socket.end()
   }
 
-  _flushAudio () {
-    if (this._audioBuffer.length > 0) {
-      const msg = Buffer.alloc(1 + this._audioBuffer.length)
-      msg.writeUInt8(MessageType.AUDIO_DATA, 0)
-      for (let i = 0; i < this._audioBuffer.length; i++) {
-        msg.writeUInt8(this._audioBuffer[i], 1 + i)
+  _parseMessages () {
+    // Parse complete messages from buffer
+    while (this._buffer.length >= 3) {
+      const type = this._buffer[0]
+      const length = this._buffer.readUInt16LE(1)
+
+      // Check if we have the complete message
+      if (this._buffer.length < 3 + length) {
+        break // Wait for more data
+      }
+
+      // Extract payload
+      const payload = this._buffer.slice(3, 3 + length)
+
+      // Emit as WebSocket-style message: [type][payload]
+      const msg = Buffer.alloc(1 + length)
+      msg[0] = type
+      if (length > 0) {
+        payload.copy(msg, 1)
       }
       this.emit('message', msg, true)
-      this._audioBuffer = []
-    }
-  }
 
-  _emitSimpleMessage (type) {
-    const msg = Buffer.alloc(1)
-    msg.writeUInt8(type, 0)
-    this.emit('message', msg, true)
-  }
-
-  _parseStream (data) {
-    let i = 0
-
-    // Check if this chunk starts with a message type byte
-    // This is where TCP write boundaries are most likely preserved
-    if (data.length > 0) {
-      const firstByte = data[0]
-
-      if (firstByte === MessageType.AUDIO_END) {
-        // End of recording - flush any buffered audio first
-        this._flushAudio()
-        this._emitSimpleMessage(MessageType.AUDIO_END)
-        this._inAudioMessage = false
-        i = 1 // Skip this byte
-      } else if (firstByte === MessageType.HEARTBEAT) {
-        this._emitSimpleMessage(MessageType.HEARTBEAT)
-        i = 1
-      } else if (firstByte === MessageType.AUDIO_DATA) {
-        // New audio message starting
-        this._inAudioMessage = true
-        i = 1 // Skip the type byte, rest is audio data
-      }
-      // Other bytes at start: treat as continuation of previous message
-    }
-
-    // Process remaining bytes as audio data
-    for (; i < data.length; i++) {
-      const byte = data[i]
-
-      // Check for embedded AUDIO_END (can happen if TCP coalesced writes)
-      // Only treat as AUDIO_END if it's a standalone 0x02 followed by
-      // either end of chunk or another message type
-      if (byte === MessageType.AUDIO_END) {
-        const nextByte = i + 1 < data.length ? data[i + 1] : -1
-        // If next byte is a message type or end of data, this is likely real AUDIO_END
-        if (nextByte === -1 || nextByte === MessageType.AUDIO_DATA ||
-            nextByte === MessageType.HEARTBEAT || nextByte === MessageType.CONFIG) {
-          this._flushAudio()
-          this._emitSimpleMessage(MessageType.AUDIO_END)
-          this._inAudioMessage = false
-          continue
-        }
-      }
-
-      // Check for new AUDIO_DATA message start
-      if (byte === MessageType.AUDIO_DATA) {
-        const nextByte = i + 1 < data.length ? data[i + 1] : -1
-        // If followed by typical audio values (> 5), this is likely a new message
-        if (nextByte > MessageType.ERROR) {
-          // This is a new AUDIO_DATA message, skip the type byte
-          this._inAudioMessage = true
-          continue
-        }
-      }
-
-      // Accumulate as audio data
-      this._audioBuffer.push(byte)
+      // Remove processed message from buffer
+      this._buffer = this._buffer.slice(3 + length)
     }
   }
 }

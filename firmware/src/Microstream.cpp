@@ -158,23 +158,32 @@ void Microstream::_sendAudio() {
   while (buf.getSize() >= MIN_SEND_SIZE) {
     unsigned int size = min((unsigned int)buf.getSize(), MAX_SEND_SIZE);
 
+    // TCP protocol: [type (1 byte)][length (2 bytes LE)][payload]
     _txBuffer[0] = MicrostreamProtocol::AUDIO_DATA;
+    _txBuffer[1] = (uint8_t)(size & 0xFF);        // Length low byte
+    _txBuffer[2] = (uint8_t)((size >> 8) & 0xFF); // Length high byte
     for (unsigned int i = 0; i < size; i++) {
-      _txBuffer[1 + i] = buf.get();
+      _txBuffer[3 + i] = buf.get();
     }
 
-    _tcpClient.write(_txBuffer, 1 + size);
+    _tcpClient.write(_txBuffer, 3 + size);
   }
 }
 
 void Microstream::_sendEnd() {
-  unsigned int len = MicrostreamProtocol::encodeAudioEnd(_txBuffer);
-  _tcpClient.write(_txBuffer, len);
+  // TCP protocol: [type][length = 0]
+  _txBuffer[0] = MicrostreamProtocol::AUDIO_END;
+  _txBuffer[1] = 0;
+  _txBuffer[2] = 0;
+  _tcpClient.write(_txBuffer, 3);
 }
 
 void Microstream::_sendHeartbeat() {
-  unsigned int len = MicrostreamProtocol::encodeHeartbeat(_txBuffer);
-  _tcpClient.write(_txBuffer, len);
+  // TCP protocol: [type][length = 0]
+  _txBuffer[0] = MicrostreamProtocol::HEARTBEAT;
+  _txBuffer[1] = 0;
+  _txBuffer[2] = 0;
+  _tcpClient.write(_txBuffer, 3);
 }
 
 void Microstream::_receiveAndPlay() {
