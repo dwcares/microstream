@@ -1,7 +1,8 @@
 #include "AudioCapture.h"
 
 AudioCapture::AudioCapture()
-  : _micPin(A0), _sampleRate(16000), _timingMicros(62), _timingFrac(500), _fracAccum(0), _capturing(false), _lastSampleTime(0), _adcMid(2048), _filterState(2048 << 8), _hpfPrevInput(0), _hpfPrevOutput(0) {}
+  : _micPin(A0), _sampleRate(16000), _timingMicros(62), _timingFrac(500), _fracAccum(0),
+    _capturing(false), _lastSampleTime(0), _adcMid(2048), _filterState(2048 << 8) {}
 
 void AudioCapture::begin(pin_t micPin, unsigned int sampleRate, unsigned int bufferSize) {
   _micPin = micPin;
@@ -34,8 +35,6 @@ void AudioCapture::startCapture() {
   _buffer.clear();
   _buffer.resetOverflowCount();
   _filterState = _adcMid << 8;  // Reset filter to calibrated center
-  _hpfPrevInput = 0;
-  _hpfPrevOutput = 0;
   _fracAccum = 0;
   _capturing = true;
   _lastSampleTime = micros();
@@ -63,9 +62,8 @@ void AudioCapture::capture() {
     // Convert to 16-bit signed using calibrated center point
     int16_t sample16 = ((int32_t)filtered - _adcMid) << 4;
 
-    // Store as two bytes, little-endian
-    _buffer.put((uint8_t)(sample16 & 0xFF));         // Low byte
-    _buffer.put((uint8_t)((sample16 >> 8) & 0xFF));  // High byte
+    // Store 16-bit sample directly in buffer
+    _buffer.put(sample16);
 
     // Advance timing with sub-microsecond accuracy
     _lastSampleTime += _timingMicros;
@@ -75,6 +73,10 @@ void AudioCapture::capture() {
       _lastSampleTime += 1;
     }
   }
+}
+
+void AudioCapture::resetTiming() {
+  _lastSampleTime = micros();
 }
 
 bool AudioCapture::isCapturing() const {

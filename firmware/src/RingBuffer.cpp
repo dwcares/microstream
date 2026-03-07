@@ -9,7 +9,7 @@ RingBuffer::~RingBuffer() {
 
 void RingBuffer::init(unsigned int capacity) {
   destroy();
-  _data = (uint8_t*)malloc(capacity * sizeof(uint8_t));
+  _data = (int16_t*)malloc(capacity * sizeof(int16_t));
   _capacity = capacity;
   _head = 0;
   _tail = 0;
@@ -28,7 +28,7 @@ void RingBuffer::destroy() {
   _count = 0;
 }
 
-bool RingBuffer::put(uint8_t value) {
+bool RingBuffer::put(int16_t value) {
   if (_count >= _capacity) {
     _overflowCount++;
     return false;
@@ -39,11 +39,11 @@ bool RingBuffer::put(uint8_t value) {
   return true;
 }
 
-uint8_t RingBuffer::get() {
+int16_t RingBuffer::get() {
   if (_count == 0) {
     return 0;
   }
-  uint8_t value = _data[_head];
+  int16_t value = _data[_head];
   _head = (_head + 1) % _capacity;
   _count--;
   return value;

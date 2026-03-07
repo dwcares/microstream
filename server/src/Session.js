@@ -51,11 +51,13 @@ class Session extends EventEmitter {
     if (!this.connected) return
 
     const buf = Buffer.from(pcmBuffer)
+    const sampleRate = this._audioConfig.sampleRate || 16000
+    const bytesPerSample = (this._audioConfig.bitDepth || 16) / 8
 
-    // Photon has 20KB buffer at 8kHz = 2.5 seconds
-    // Send 2KB chunks (~250ms) frequently to keep buffer fed during blocking playback
-    const chunkSize = 2048
-    const chunkDurationMs = (chunkSize / 8000) * 1000  // ~256ms per chunk
+    // Calculate chunk size for ~100ms of audio
+    // At 16kHz 16-bit: 16000 * 2 * 0.1 = 3200 bytes per 100ms
+    const chunkSize = Math.floor(sampleRate * bytesPerSample * 0.1)
+    const chunkDurationMs = 100
     const sendIntervalMs = chunkDurationMs * 0.4  // Send at 40% to stay well ahead
 
     let offset = 0

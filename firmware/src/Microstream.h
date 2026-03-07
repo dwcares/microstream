@@ -38,6 +38,12 @@ public:
   bool isPlaying() const;
   bool isConnected() const;
 
+  // Get current playback audio level for LED visualization (0-255)
+  uint8_t getPlaybackLevel() const;
+
+  // Set callback for real-time level updates during playback (for LED sync)
+  void onPlaybackLevel(void (*cb)(uint8_t level));
+
   // Event callbacks
   void onConnected(MicrostreamCallback cb);
   void onDisconnected(MicrostreamCallback cb);

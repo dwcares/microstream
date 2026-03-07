@@ -24,6 +24,9 @@ public:
   // Call this frequently from loop() while capturing
   void capture();
 
+  // Reset timing to avoid catch-up after a pause
+  void resetTiming();
+
   bool isCapturing() const;
 
   // Access the ring buffer directly for reading samples
@@ -46,16 +49,8 @@ private:
   int16_t _adcMid;
 
   // Simple IIR low-pass filter state for anti-aliasing
-  // At 16kHz sample rate, alpha=0.7 gives cutoff ~5-6kHz (Nyquist is 8kHz)
   int32_t _filterState;
   static const int32_t FILTER_ALPHA = 180;  // 0.7 * 256 ≈ 180
-
-  // DC-blocking high-pass filter to remove drift
-  // y[n] = alpha * (y[n-1] + x[n] - x[n-1])
-  // Alpha ~0.995 gives cutoff ~12Hz at 16kHz (removes DC, keeps voice)
-  int32_t _hpfPrevInput;
-  int32_t _hpfPrevOutput;
-  static const int32_t HPF_ALPHA = 254;  // 0.995 * 256 ≈ 254
 };
 
 #endif

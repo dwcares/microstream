@@ -32,7 +32,7 @@ void Microstream::begin(const char* host, int port, const char* path, Microstrea
 
   // Default values
   if (_config.sampleRate == 0) _config.sampleRate = 16000;
-  if (_config.bitDepth == 0) _config.bitDepth = 8;
+  if (_config.bitDepth == 0) _config.bitDepth = 16;
   if (_config.captureBufferSize == 0) _config.captureBufferSize = 8192;
   if (_config.playbackBufferSize == 0) _config.playbackBufferSize = 32768;
 
@@ -75,6 +75,7 @@ void Microstream::update() {
     if (playing && !_wasPlaying && _onPlaybackStart) {
       _onPlaybackStart();
     } else if (!playing && _wasPlaying && _onPlaybackEnd) {
+      _capture.resetTiming();  // Reset capture timing after playback
       _onPlaybackEnd();
     }
     _wasPlaying = playing;
@@ -114,13 +115,19 @@ bool Microstream::isRecording() const {
 }
 
 bool Microstream::isPlaying() const {
-  // Only check the active playing flag, not buffered data
-  // This ensures we properly transition out of playing state
   return _playback.isPlaying();
 }
 
 bool Microstream::isConnected() const {
   return _connected;
+}
+
+uint8_t Microstream::getPlaybackLevel() const {
+  return _playback.getLevel();
+}
+
+void Microstream::onPlaybackLevel(void (*cb)(uint8_t level)) {
+  _playback.onLevelChange(cb);
 }
 
 void Microstream::onConnected(MicrostreamCallback cb) {
@@ -155,18 +162,25 @@ void Microstream::_connect() {
 void Microstream::_sendAudio() {
   RingBuffer& buf = _capture.buffer();
 
+  // For 16-bit audio, each sample is 2 bytes
+  // MIN_SEND_SIZE and MAX_SEND_SIZE are in samples
   while (buf.getSize() >= MIN_SEND_SIZE) {
-    unsigned int size = min((unsigned int)buf.getSize(), MAX_SEND_SIZE);
+    unsigned int samples = min((unsigned int)buf.getSize(), MAX_SEND_SIZE / 2);
+    unsigned int bytes = samples * 2;
 
     // TCP protocol: [type (1 byte)][length (2 bytes LE)][payload]
     _txBuffer[0] = MicrostreamProtocol::AUDIO_DATA;
-    _txBuffer[1] = (uint8_t)(size & 0xFF);        // Length low byte
-    _txBuffer[2] = (uint8_t)((size >> 8) & 0xFF); // Length high byte
-    for (unsigned int i = 0; i < size; i++) {
-      _txBuffer[3 + i] = buf.get();
+    _txBuffer[1] = (uint8_t)(bytes & 0xFF);        // Length low byte
+    _txBuffer[2] = (uint8_t)((bytes >> 8) & 0xFF); // Length high byte
+
+    for (unsigned int i = 0; i < samples; i++) {
+      int16_t sample = buf.get();
+      // Pack as little-endian (low byte first)
+      _txBuffer[3 + i * 2] = (uint8_t)(sample & 0xFF);
+      _txBuffer[3 + i * 2 + 1] = (uint8_t)((sample >> 8) & 0xFF);
     }
 
-    _tcpClient.write(_txBuffer, 3 + size);
+    _tcpClient.write(_txBuffer, 3 + bytes);
   }
 }
 
@@ -188,21 +202,25 @@ void Microstream::_sendHeartbeat() {
 
 void Microstream::_receiveAndPlay() {
   // Read available data from TCP and handle messages.
-  // Raw TCP has no framing, so we use a heuristic to find message boundaries:
-  // known message type bytes (0x01-0x05) are near-minimum values in 8-bit
-  // unsigned PCM (centered at 128) and extremely rare in real audio.
+  // 16-bit audio: read 2 bytes per sample, little-endian
   while (_tcpClient.available()) {
     uint8_t typeByte = _tcpClient.read();
 
     switch (typeByte) {
       case MicrostreamProtocol::AUDIO_DATA: {
-        while (_tcpClient.available()) {
+        // Read 16-bit samples (2 bytes each, little-endian)
+        while (_tcpClient.available() >= 2) {
+          uint8_t low = _tcpClient.read();
           int next = _tcpClient.peek();
+          // Check if next byte is a message type (end of audio data)
           if (next >= MicrostreamProtocol::AUDIO_DATA &&
               next <= MicrostreamProtocol::MSG_ERROR) {
+            // Odd byte at end - can't form a sample, discard
             break;
           }
-          _playback.feed((uint8_t)_tcpClient.read());
+          uint8_t high = _tcpClient.read();
+          int16_t sample = (int16_t)((high << 8) | low);
+          _playback.feed(sample);
         }
         break;
       }
@@ -236,14 +254,19 @@ void Microstream::_handleMessage(const uint8_t* data, unsigned int len) {
   switch (type) {
     case MicrostreamProtocol::AUDIO_DATA:
       if (len > 1) {
-        _playback.feed(data + 1, len - 1);
+        // 16-bit audio: unpack 2 bytes per sample, little-endian
+        unsigned int numSamples = (len - 1) / 2;
+        for (unsigned int i = 0; i < numSamples; i++) {
+          uint8_t low = data[1 + i * 2];
+          uint8_t high = data[1 + i * 2 + 1];
+          int16_t sample = (int16_t)((high << 8) | low);
+          _playback.feed(sample);
+        }
       }
       break;
     case MicrostreamProtocol::HEARTBEAT:
-      // Heartbeat received
       break;
     case MicrostreamProtocol::CONFIG:
-      // Could parse config JSON here in the future
       break;
     default:
       break;
