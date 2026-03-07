@@ -131,6 +131,10 @@ void Microstream::onPlaybackLevel(void (*cb)(uint8_t level)) {
   _playback.onLevelChange(cb);
 }
 
+void Microstream::onPlaybackTick(void (*cb)()) {
+  _playback.onTick(cb);
+}
+
 void Microstream::onConnected(MicrostreamCallback cb) {
   _onConnected = cb;
 }

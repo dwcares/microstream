@@ -44,6 +44,9 @@ public:
   // Set callback for real-time level updates during playback (for LED sync)
   void onPlaybackLevel(void (*cb)(uint8_t level));
 
+  // Set callback for periodic updates during blocking playback (for LED breathing, etc.)
+  void onPlaybackTick(void (*cb)());
+
   // Event callbacks
   void onConnected(MicrostreamCallback cb);
   void onDisconnected(MicrostreamCallback cb);

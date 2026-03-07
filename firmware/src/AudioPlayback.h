@@ -7,6 +7,9 @@
 // Callback type for LED updates during playback
 typedef void (*LevelCallback)(uint8_t level);
 
+// Callback type for periodic updates during blocking playback
+typedef void (*TickCallback)();
+
 /**
  * Non-blocking audio playback to a PWM speaker pin.
  *
@@ -41,6 +44,9 @@ public:
   // Set callback for real-time level updates during blocking play()
   void onLevelChange(LevelCallback cb);
 
+  // Set callback for periodic updates during blocking play() (for LED breathing, etc.)
+  void onTick(TickCallback cb);
+
   RingBuffer& buffer();
 
 private:
@@ -55,6 +61,7 @@ private:
   uint8_t _peakLevel;         // Peak amplitude in current window
   uint16_t _sampleCount;      // Samples since last level update
   LevelCallback _levelCallback;
+  TickCallback _tickCallback;
 };
 
 #endif

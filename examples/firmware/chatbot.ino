@@ -81,14 +81,8 @@ void loop() {
     }
   }
 
-  // --- LED feedback ---
-  if (mic.isRecording()) {
-    digitalWrite(LED_PIN, HIGH);
-  } else if (mic.isConnected()) {
-    digitalWrite(LED_PIN, (millis() / 1000) % 2 ? HIGH : LOW);
-  } else {
-    digitalWrite(LED_PIN, LOW);
-  }
+  // --- LED feedback: on = connected, off = disconnected ---
+  digitalWrite(LED_PIN, mic.isConnected() ? HIGH : LOW);
 
   // --- Status ---
   if (millis() - lastStatusTime > 5000) {

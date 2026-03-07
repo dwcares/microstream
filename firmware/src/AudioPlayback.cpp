@@ -1,7 +1,7 @@
 #include "AudioPlayback.h"
 
 AudioPlayback::AudioPlayback()
-  : _speakerPin(A3), _sampleRate(8000), _timingMicros(125), _playing(false), _pwmInitialized(false), _lastSampleTime(0), _currentLevel(0), _peakLevel(0), _sampleCount(0), _levelCallback(NULL) {}
+  : _speakerPin(A3), _sampleRate(8000), _timingMicros(125), _playing(false), _pwmInitialized(false), _lastSampleTime(0), _currentLevel(0), _peakLevel(0), _sampleCount(0), _levelCallback(NULL), _tickCallback(NULL) {}
 
 void AudioPlayback::begin(pin_t speakerPin, unsigned int sampleRate, unsigned int bufferSize) {
   _speakerPin = speakerPin;
@@ -79,6 +79,7 @@ bool AudioPlayback::play() {
 
   _playing = true;
   uint8_t lastReportedLevel = 0;
+  unsigned long lastTickTime = millis();
 
   // Blocking playback with tight timing
   while (_buffer.getSize() > 0) {
@@ -110,10 +111,17 @@ bool AudioPlayback::play() {
       _peakLevel = 0;
       _sampleCount = 0;
 
-      // Notify callback for real-time LED update during blocking playback
+      // Notify level callback for real-time LED update during blocking playback
       if (_levelCallback && _currentLevel != lastReportedLevel) {
         _levelCallback(_currentLevel);
         lastReportedLevel = _currentLevel;
+      }
+
+      // Call tick callback periodically (~every 50ms at 8kHz) for LED breathing, etc.
+      unsigned long now = millis();
+      if (_tickCallback && now - lastTickTime >= 10) {
+        _tickCallback();
+        lastTickTime = now;
       }
     }
   }
@@ -144,6 +152,10 @@ uint8_t AudioPlayback::getLevel() const {
 
 void AudioPlayback::onLevelChange(LevelCallback cb) {
   _levelCallback = cb;
+}
+
+void AudioPlayback::onTick(TickCallback cb) {
+  _tickCallback = cb;
 }
 
 RingBuffer& AudioPlayback::buffer() {
