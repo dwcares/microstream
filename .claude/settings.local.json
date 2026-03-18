@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc:*)",
+      "WebSearch",
+      "Bash(xxd:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git status:*)",
+      "Bash(node --version:*)",
+      "Bash(npm --version)",
+      "Bash(npm install:*)",
+      "Bash(winget search:*)",
+      "Bash(where:*)",
+      "Bash(ls:*)",
+      "Bash(npm config set:*)",
+      "Bash(export npm_config_msvs_version=2022)",
+      "Bash(cmd /c \"\"\"C:\\\\Program Files \\(x86\\)\\\\Microsoft Visual Studio\\\\2022\\\\BuildTools\\\\VC\\\\Auxiliary\\\\Build\\\\vcvarsall.bat\"\" arm64 && npm install -g particle-cli\")",
+      "Bash(nvm --version:*)",
+      "Bash(fnm --version:*)",
+      "Bash(zip:*)",
+      "Bash(powershell -Command \"Compress-Archive -Path ''firmware\\\\*'' -DestinationPath ''microstream-library.zip'' -Force\":*)",
+      "WebFetch(domain:docs.particle.io)",
+      "Bash(wsl -e bash -c \"node --version && npm --version\")",
+      "Bash(wsl -e bash -c \"curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs\")",
+      "Bash(wsl -e bash -c:*)",
+      "Bash(npm pack:*)",
+      "Bash(npm whoami:*)",
+      "Bash(npm publish:*)",
+      "Bash(git reset:*)",
+      "Bash(git push)"
+    ]
+  }
+}
