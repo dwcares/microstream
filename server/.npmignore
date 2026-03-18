@@ -1,0 +1,6 @@
+test/
+test-device.js
+.git/
+.github/
+node_modules/
+*.log

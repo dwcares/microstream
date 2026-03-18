@@ -6,8 +6,36 @@
   "scripts": {
     "start": "node src/index.js"
   },
+  "author": "dwcares",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dwcares/microstream.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dwcares/microstream/issues"
+  },
+  "homepage": "https://github.com/dwcares/microstream#readme",
+  "keywords": [
+    "audio",
+    "streaming",
+    "websocket",
+    "particle",
+    "iot",
+    "microcontroller",
+    "pcm",
+    "wav",
+    "bidirectional"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
   "dependencies": {
     "ws": "^8.16.0"
-  },
-  "license": "MIT"
+  }
 }

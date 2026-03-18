@@ -1,0 +1,36 @@
+name: Publish Particle Library
+
+on:
+  workflow_dispatch:  # Manual trigger
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Particle CLI
+        run: npm install -g particle-cli
+
+      - name: Login to Particle
+        run: particle login --token ${{ secrets.PARTICLE_AUTH_TOKEN }}
+
+      - name: Validate Library
+        working-directory: firmware
+        run: particle library validate
+
+      - name: Upload Library
+        working-directory: firmware
+        run: particle library upload
+
+      - name: Publish Library
+        working-directory: firmware
+        run: particle library publish microstream
